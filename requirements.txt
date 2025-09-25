@@ -1,6 +1,8 @@
-gradio
-pandas
+gradio==5.47.0
+plotly>=6.0
+pandas>=2.0
 numpy
 requests
-plotly
 ccxt
+scikit-learn
+vaderSentiment
