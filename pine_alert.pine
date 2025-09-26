@@ -1,0 +1,14 @@
+//@version=5
+indicator("CrypTrader: Alerta MA Cross", overlay=true)
+fast = ta.sma(close, 10)
+slow = ta.sma(close, 50)
+plot(fast, color=color.blue)
+plot(slow, color=color.orange)
+
+longSignal = ta.crossover(fast, slow)
+shortSignal = ta.crossunder(fast, slow)
+
+if (longSignal)
+    alert("LONG_SIGNAL", alert.freq_once_per_bar_close)
+if (shortSignal)
+    alert("SHORT_SIGNAL", alert.freq_once_per_bar_close)

@@ -1,3 +1,5 @@
+fastapi
+uvicorn[standard]
 gradio==5.47.0
 plotly>=6.0
 pandas>=2.0
@@ -6,3 +8,4 @@ requests
 ccxt
 scikit-learn
 vaderSentiment
+python-multipart
