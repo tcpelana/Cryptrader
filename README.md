@@ -6,5 +6,5 @@ colorTo: purple
 sdk: gradio
 app_file: app.py
 pinned: false
-short_description: Simulador de predicciones de criptomonedas con datos históricos y noticias
+short_description: predictor de cripto trading
 ---
