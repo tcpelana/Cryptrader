@@ -312,6 +312,119 @@ def simulate_strategy(df: pd.DataFrame,
 
 
 # ---------------------------
+# Compatibilidad: simulate_strategy_with_costs
+# ---------------------------
+# Esta función es autocontenida y sirve para que app.py pueda importarla.
+# Asume que el DataFrame de entrada tiene columna 'close' y un index de fechas.
+def simulate_strategy_with_costs(df, capital=None, fee_pct=None, slippage_pct=None, initial_signal=None):
+    """
+    Simulador compatible con app.py:
+    - df: pd.DataFrame con columna 'close' (index datetime o columna 'date')
+    - capital: float (si None usa START_CAPITAL)
+    - fee_pct: comisiones (si None usa FEE_PCT)
+    - slippage_pct: slippage (si None usa SLIPPAGE_PCT)
+    - initial_signal: "LONG" | "SHORT" | None
+    Retorna: (trades_list, equity_series) donde equity_series es pd.Series indexado por fechas.
+    """
+    try:
+        import pandas as _pd
+        import numpy as _np
+    except Exception:
+        raise RuntimeError("pandas/numpy required for simulate_strategy_with_costs")
+
+    # usar valores por defecto del módulo si no se pasan
+    if capital is None:
+        try:
+            capital = float(globals().get("START_CAPITAL", 10000))
+        except Exception:
+            capital = 10000.0
+    if fee_pct is None:
+        try:
+            fee_pct = float(globals().get("FEE_PCT", 0.00075))
+        except Exception:
+            fee_pct = 0.00075
+    if slippage_pct is None:
+        try:
+            slippage_pct = float(globals().get("SLIPPAGE_PCT", 0.0005))
+        except Exception:
+            slippage_pct = 0.0005
+
+    # normalizar df
+    df_local = df.copy()
+    # si 'date' es columna, usarla; si no, index debe ser datetime
+    if "date" in df_local.columns:
+        try:
+            df_local = df_local.set_index(pd.to_datetime(df_local["date"]))
+        except Exception:
+            df_local = df_local.set_index("date")
+    # asegurar columna 'close'
+    if "close" not in df_local.columns and "Close" in df_local.columns:
+        df_local["close"] = df_local["Close"]
+    if "close" not in df_local.columns:
+        raise ValueError("DataFrame must contain 'close' column for simulate_strategy_with_costs")
+
+    trades = []
+    cash = float(capital)
+    pos_units = 0.0
+    equity_list = []
+    dates = []
+
+    for idx, row in df_local.iterrows():
+        price = float(row["close"])
+        # obtener señal si existe
+        sig = None
+        # soportar columna signal o señal en row
+        if "signal" in df_local.columns:
+            try:
+                sig = str(row["signal"])
+            except Exception:
+                sig = None
+
+        # manejar initial signal en la primera fila
+        if len(equity_list) == 0 and initial_signal is not None and pos_units == 0:
+            if str(initial_signal).upper() == "LONG":
+                eff_price = price * (1 + slippage_pct)
+                units = cash / eff_price if eff_price > 0 else 0.0
+                fee = cash * fee_pct
+                pos_units = units
+                cash = cash - units * eff_price - fee
+                trades.append({"date": str(idx), "side": "buy", "price": eff_price, "size": units, "fee": fee})
+            elif str(initial_signal).upper() == "SHORT":
+                # short handling simple: no impl. por defecto lo ignoramos (long-only)
+                pass
+
+        # señales en data
+        if sig is not None:
+            sig_upper = str(sig).upper()
+            if "BUY" in sig_upper and pos_units == 0:
+                eff_price = price * (1 + slippage_pct)
+                units = cash / eff_price if eff_price > 0 else 0.0
+                fee = cash * fee_pct
+                pos_units = units
+                cash = cash - units * eff_price - fee
+                trades.append({"date": str(idx), "side": "buy", "price": eff_price, "size": units, "fee": fee})
+            elif "SELL" in sig_upper and pos_units > 0:
+                eff_price = price * (1 - slippage_pct)
+                proceeds = pos_units * eff_price
+                fee = proceeds * fee_pct
+                cash = cash + proceeds - fee
+                trades.append({"date": str(idx), "side": "sell", "price": eff_price, "size": pos_units, "fee": fee})
+                pos_units = 0.0
+
+        equity = cash + pos_units * price
+        equity_list.append(equity)
+        dates.append(idx)
+
+    # construir series de equity
+    if len(dates) == 0:
+        # DataFrame vacío -> devolver capital inicial
+        eq_series = pd.Series([capital], index=pd.DatetimeIndex([pd.Timestamp.now()]))
+    else:
+        eq_series = pd.Series(equity_list, index=pd.DatetimeIndex(dates))
+    return trades, eq_series
+
+
+# ---------------------------
 # METRICS, MC, BOOTSTRAP
 # ---------------------------
 def metrics_from_equity(equity: pd.Series, periods_per_year: int = 252) -> Dict[str, Any]:
